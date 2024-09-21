@@ -25,6 +25,7 @@ import java.net.InetAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,9 +44,10 @@ public class Docker implements Closeable {
     private final boolean verbose;
     private final boolean privileged;
     private final AbstractBuild build;
+    private final List<String> protectedEnvironmentVariables;
     private EnvVars envVars;
 
-    public Docker(DockerServerEndpoint dockerHost, String dockerInstallation, String credentialsId, AbstractBuild build, Launcher launcher, TaskListener listener, boolean verbose, boolean privileged) throws IOException, InterruptedException {
+    public Docker(DockerServerEndpoint dockerHost, String dockerInstallation, String credentialsId, AbstractBuild build, Launcher launcher, TaskListener listener, boolean verbose, boolean privileged, String protectedEnvironmentVariables) throws IOException, InterruptedException {
         this.dockerHost = dockerHost;
         this.dockerExecutable = DockerTool.getExecutable(dockerInstallation, Computer.currentComputer().getNode(), listener, build.getEnvironment(listener));
         this.registryEndpoint = new DockerRegistryEndpoint(null, credentialsId);
@@ -54,6 +56,8 @@ public class Docker implements Closeable {
         this.build = build;
         this.verbose = verbose | debug;
         this.privileged = privileged;
+        protectedEnvironmentVariables = (protectedEnvironmentVariables == null ? "" : protectedEnvironmentVariables).replaceAll("\\s+", "");
+        this.protectedEnvironmentVariables = Arrays.asList(protectedEnvironmentVariables.split(","));
     }
 
 
@@ -213,7 +217,7 @@ public class Docker implements Closeable {
         }
 
         for (Map.Entry<String, String> e : environment.entrySet()) {
-            if ("HOSTNAME".equals(e.getKey())) {
+            if ("HOSTNAME".equals(e.getKey()) || protectedEnvironmentVariables.contains(e.getKey())) {
                 continue;
             }
             args.add("--env");
@@ -337,6 +341,9 @@ public class Docker implements Closeable {
 
         // Build a list of environment, hidding node's one
         for (Map.Entry<String, String> e : environment.entrySet()) {
+            if(protectedEnvironmentVariables.contains(e.getKey())) {
+                continue;
+            }
             prefix.add(e.getKey()+"="+e.getValue());
         }
 
